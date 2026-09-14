@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Warm Transfer POC</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 480px; margin: 40px auto; }
+  label { display: block; margin-top: 12px; font-size: 13px; color: #444; }
+  input, select { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
+  button { margin-top: 16px; padding: 10px 16px; cursor: pointer; }
+  #log { margin-top: 20px; padding: 10px; background: #f4f4f4; font-size: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+  <h2>Warm Transfer POC</h2>
+
+  <label>Mode
+    <select id="mode">
+      <option value="ai">AI (Gemini)</option>
+      <option value="human">Human-in-the-loop</option>
+    </select>
+  </label>
+  <label>Lead phone number<input id="leadNumber" placeholder="+1..." /></label>
+  <label>Lead name<input id="leadName" placeholder="Jane" /></label>
+  <label>Offer<input id="offer" placeholder="the roofing inspection" /></label>
+  <label>Third-party (partner) number<input id="thirdPartyNumber" placeholder="+1..." /></label>
+  <button id="dial">1. Dial lead</button>
+
+  <div id="humanControls" style="display:none">
+    <label>Your (agent) phone number<input id="agentNumber" placeholder="+1..." /></label>
+    <button id="agentJoin">2. Join call yourself</button>
+    <button id="transfer">3. Bring in partner</button>
+  </div>
+
+  <pre id="log"></pre>
+
+  <script>
+    let sessionId = null;
+    const log = (msg) => { document.getElementById('log').textContent += msg + "\n"; };
+
+    document.getElementById('mode').addEventListener('change', (e) => {
+      document.getElementById('humanControls').style.display = e.target.value === 'human' ? 'block' : 'none';
+    });
+
+    document.getElementById('dial').addEventListener('click', async () => {
+      const body = {
+        leadNumber: leadNumber.value,
+        leadName: leadName.value,
+        offer: offer.value,
+        thirdPartyNumber: thirdPartyNumber.value,
+        mode: mode.value,
+      };
+      const r = await fetch('/calls/outbound', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await r.json();
+      sessionId = data.sessionId;
+      log('Dialing lead. sessionId=' + sessionId);
+    });
+
+    document.getElementById('agentJoin').addEventListener('click', async () => {
+      const r = await fetch('/calls/agent-join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId, agentNumber: agentNumber.value }) });
+      log('Agent join: ' + JSON.stringify(await r.json()));
+    });
+
+    document.getElementById('transfer').addEventListener('click', async () => {
+      const r = await fetch('/api/transfer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId }) });
+      log('Transfer: ' + JSON.stringify(await r.json()));
+    });
+  </script>
+</body>
+</html>
