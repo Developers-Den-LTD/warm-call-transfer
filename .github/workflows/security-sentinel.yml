@@ -1,0 +1,60 @@
+name: Security Sentinel (Anti-Malware Guard)
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_call:
+
+jobs:
+  inspect-security:
+    name: Inspect Commit for Supply Chain Poisoning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Scan for Malware Artifacts
+        run: |
+          echo "Scanning repository for unauthorized malware payloads..."
+          FAILED=0
+
+          # 1. Check for api.js
+          if [ -n "$(git ls-files | grep -E '(^|/)api.js$')" ]; then
+            echo "::error::CRITICAL: Malicious api.js payload detected!"
+            FAILED=1
+          fi
+
+          # 2. Check for poisoned package.json
+          if [ -f "package.json" ]; then
+            if grep -E -q 'nodes+(./)?api.js' package.json; then
+              echo "::error file=package.json::CRITICAL: Poisoned startup script ('node api.js') detected in package.json!"
+              FAILED=1
+            fi
+          fi
+
+          # 3. Check for .gitignore bypass entries
+          if [ -f ".gitignore" ]; then
+            if grep -E -q "temp_auto_push|temp_interactive_push|branch_structure.json" .gitignore; then
+              echo "::error file=.gitignore::CRITICAL: Malware batch script bypass entries detected in .gitignore!"
+              FAILED=1
+            fi
+          fi
+
+          # 4. Check for known C2 wallet address, obfuscated bootstrap signatures, or RPC lookups
+          if git grep -I -E "0x1eef0849eda15d87f64e51c73c8442cf3c8bcef3|global['!']|v8("",x8)|_0x[0-9a-f]{4,6}(_0x|withRpcEndpoints|rpcCall|eth_getBlock|bsc-dataseed" -- ':!.github' ':!*.md' ':!*.json'; then
+            echo "::error::CRITICAL: Known Web3 C2 malware signature or obfuscated payload detected in source files!"
+            FAILED=1
+          fi
+
+          if [ $FAILED -ne 0 ]; then
+            echo "=========================================================="
+            echo "SECURITY CHECK FAILED: UNAUTHORIZED INJECTION DETECTED!"
+            echo "=========================================================="
+            exit 1
+          fi
+
+          echo "Repository is clean and verified secure."
